@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+websockets
+numpy
+torch
+silero-vad
+deepgram-sdk
+openai
+elevenlabs
