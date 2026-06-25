@@ -4,6 +4,6 @@ websockets
 numpy
 torch
 silero-vad
-deepgram-sdk
-openai
+deepgram-sdk==7.0.0
+groq
 elevenlabs

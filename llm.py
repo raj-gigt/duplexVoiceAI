@@ -1,30 +1,39 @@
-from openai import AsyncOpenAI
+from __future__ import annotations
 
-from config import OPENAI_API_KEY, LLM_MODEL, SYSTEM_PROMPT
+from typing import AsyncIterator
 
+from groq import AsyncGroq
 
-_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-
-
-def create_history() -> list[dict]:
-    """Create a fresh conversation history with the system prompt."""
-    return [{"role": "system", "content": SYSTEM_PROMPT}]
+from config import AppConfig
 
 
-async def get_response(transcript: str, history: list[dict]) -> str:
-    """Send transcript to OpenAI and return the assistant's reply.
+class GroqLLM:
+    """Streaming LLM completions via Groq."""
 
-    Mutates `history` in-place to maintain conversation context.
-    """
-    history.append({"role": "user", "content": transcript})
+    def __init__(self, config: AppConfig) -> None:
+        self._client = AsyncGroq(api_key=config.groq_api_key)
+        self._model = config.llm_model
+        self._system_prompt = config.system_prompt
 
-    # TODO: Switch to streaming (stream=True) and yield partial tokens
-    #       so TTS can start synthesizing before the full response is ready.
-    response = await _client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=history,
-    )
+    def create_history(self) -> list[dict]:
+        """Create a fresh conversation history with the system prompt."""
+        return [{"role": "system", "content": self._system_prompt}]
 
-    reply = response.choices[0].message.content or ""
-    history.append({"role": "assistant", "content": reply})
-    return reply
+    async def stream_response(
+        self, transcript: str, history: list[dict]
+    ) -> AsyncIterator[str]:
+        """Stream the assistant reply token-by-token.
+
+        Does NOT mutate *history* -- the caller commits the turn once it knows
+        whether the response completed or was interrupted.
+        """
+        messages = history + [{"role": "user", "content": transcript}]
+        stream = await self._client.chat.completions.create(
+            model=self._model,
+            messages=messages,
+            stream=True,
+        )
+        async for chunk in stream:
+            token = chunk.choices[0].delta.content
+            if token:
+                yield token
